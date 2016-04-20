@@ -1,0 +1,31 @@
+#!/bin/bash
+
+set -ueo pipefail
+
+source config/${ENVIRONMENT:-prod}.sh
+
+registry=${REGISTRY:=containers-registry.ohthree.com}
+user=${USER:=team-containers}
+tag=${TAG:-latest}
+
+docker_control_image=${registry}/${user}/rcs-docker-control:${tag}
+
+if [ ${DEPLOY_REDIS:-0} -ne 0 ]; then
+  docker rm -vf rcs-docker-control-redis 2>/dev/null || true
+   docker run \
+    -d \
+    --name rcs-docker-control-redis \
+    --volumes-from rcs-docker-control-redis-data \
+    redis:latest
+fi
+
+echo "Deploying ${docker_control_image}"
+
+docker rm -fv rcs-docker-control 2>/dev/null || true
+docker run \
+--detach \
+--env REDIS_HOST=redis \
+--env CARINA_CP_URL=${CARINA_CP_URL} \
+--link rcs-docker-control-redis:redis \
+--name rcs-docker-control \
+${docker_control_image}

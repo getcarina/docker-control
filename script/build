@@ -1,0 +1,32 @@
+#!/bin/bash
+
+set -ueo pipefail
+
+push=0
+setlatest=0
+while getopts "lpo:" opt; do
+  case "$opt" in
+    o)  out_file=$OPTARG
+				;;
+    \?) echo "Invalid option: -$OPTARG" >&2
+        echo -e "$usage"
+        exit 1
+        ;;
+    :)
+        echo "Option -$OPTARG requires an argument." >&2
+        exit 1
+        ;;
+  esac
+done
+
+REGISTRY_USER=${REGISTRY:=containers-registry.ohthree.com/}${USER:=team-containers}/
+TAG=$(git rev-parse HEAD).$(date -u +%s)$(git diff-index --quiet --exit-code HEAD || echo .WIP)
+
+image=${REGISTRY_USER}rcs-docker-control:${TAG}
+
+# Build/run the control panel first.
+docker build \
+	-t ${image} \
+  .
+
+echo "Build complete. Tag:" ${TAG}
