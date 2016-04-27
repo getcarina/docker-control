@@ -28,4 +28,5 @@ docker run \
 --env CARINA_CP_URL=${CARINA_CP_URL} \
 --link rcs-docker-control-redis:redis \
 --name rcs-docker-control \
+--restart unless-stopped \
 ${docker_control_image}

@@ -1,12 +1,15 @@
 var http = require('http');
 var https = require('https');
 var url = require('url');
+var WebSocketServer = require('ws').Server;
 
 var logger = require('./lib/logging');
 var credentials = require('./lib/credentials');
+var WebSocketRouter = require('./lib/ws/router');
 
 // Incoming requests look like /:clusterName/<remote API endpoint>
-var server = http.createServer((req, res, next) => {
+var server = http.createServer((req, res) => {
+
   res.locals = {
     _canContinue: true,
     userInfo: {}
@@ -110,6 +113,14 @@ var server = http.createServer((req, res, next) => {
     res.emit('abort', err);
   });
 });
+
+// In parallel with the REST proxy, we also listen for WebSocket connections to
+// do things like stream logs or attach directly to running containers.
+var wss = new WebSocketServer({
+  server: server
+});
+
+wss.on('connection', WebSocketRouter);
 
 server.listen(8080, () => {
   logger.info('Server listening on port %s...', 8080);
