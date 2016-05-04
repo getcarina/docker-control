@@ -5,6 +5,7 @@ var WebSocketServer = require('ws').Server;
 
 var logger = require('./lib/logging');
 var credentials = require('./lib/credentials');
+var version = require('./lib/version');
 var WebSocketRouter = require('./lib/ws/router');
 
 // Incoming requests look like /:clusterName/<remote API endpoint>
@@ -59,7 +60,7 @@ var server = http.createServer((req, res) => {
   }
 
   try {
-    res.locals.dockerPath = '/v1.22/' + incomingURL.pathname.match(/^\/.+?\/(.+?)$/)[1];
+    res.locals.dockerPath = '/v{ApiVersion}/' + incomingURL.pathname.match(/^\/.+?\/(.+?)$/)[1];
   } catch (e) {
 
     res.emit('abort', {
@@ -77,11 +78,29 @@ var server = http.createServer((req, res) => {
 
   credentials.get(res.locals.userInfo)
   .then((creds) => {
-    creds.path = res.locals.dockerPath;
-    creds.method = req.method;
+    res.locals.creds = creds;
+    return version.get({
+      sessionId: res.locals.userInfo.sessionId,
+      cluster: res.locals.userInfo.cluster,
+      creds: res.locals.creds
+    });
+  })
+  .then((apiVersion) => {
+    res.locals.version = apiVersion;
 
-    logger.info('Proxying: %s https://%s:%s%s', creds.method, creds.host, creds.port, creds.path);
-    var request = https.request(creds, (dockerResponse) => {
+    res.locals.creds.path =
+      res.locals.dockerPath.replace('{ApiVersion}', res.locals.version);
+    res.locals.creds.method = req.method;
+
+    logger.info(
+      'Proxying: %s https://%s:%s%s',
+      res.locals.creds.method,
+      res.locals.creds.host,
+      res.locals.creds.port,
+      res.locals.creds.path
+    );
+
+    var request = https.request(res.locals.creds, (dockerResponse) => {
       // Pipe the Docker API response to the client
       res.statusCode = dockerResponse.statusCode;
       for (var name in dockerResponse.headers) {
@@ -90,8 +109,8 @@ var server = http.createServer((req, res) => {
         }
       }
 
-      dockerResponse.on('end', (arg) => {
-        logger.debug('Ending upstream response', arg);
+      dockerResponse.on('end', () => {
+        logger.debug('Ending upstream response');
       });
 
       dockerResponse.pipe(res);
